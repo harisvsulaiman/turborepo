@@ -38,18 +38,29 @@ func GetPackageDeps(rootPath turbopath.AbsolutePath, p *PackageDepsOptions) (map
 		}
 		result = gitLsTreeOutput
 	} else {
+
+		// Add in package.json to input patterns because if the `scripts` in
+		// the package.json change (i.e. the tasks that turbo executes), we want
+		// a cache miss, since any existing cache could be invalid.
+		// Note this package.json will be resolved relative to the pkgPath.
+		p.InputPatterns = append(p.InputPatterns, "package.json")
+
 		absoluteFilesToHash, err := globby.GlobFiles(pkgPath.ToStringDuringMigration(), p.InputPatterns, nil)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to resolve input globs %v", p.InputPatterns)
 		}
+
 		filesToHash := make([]turbopath.AnchoredSystemPath, len(absoluteFilesToHash))
 		for i, rawPath := range absoluteFilesToHash {
 			relativePathString, err := pkgPath.RelativePathString(rawPath)
+
 			if err != nil {
 				return nil, errors.Wrapf(err, "not relative to package: %v", rawPath)
 			}
+
 			filesToHash[i] = turbopath.AnchoredSystemPathFromUpstream(relativePathString)
 		}
+
 		hashes, err := gitHashObject(turbopath.AbsoluteSystemPathFromUpstream(pkgPath.ToStringDuringMigration()), filesToHash)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed hashing resolved inputs globs")
