@@ -31,7 +31,12 @@ func GetPackageDeps(rootPath turbopath.AbsolutePath, p *PackageDepsOptions) (map
 	pkgPath := rootPath.Join(p.PackagePath.ToStringDuringMigration())
 	// Add all the checked in hashes.
 	var result map[turbopath.AnchoredUnixPath]string
-	if len(p.InputPatterns) == 0 {
+
+	// start this off as the default input. we may mutate this later,
+	// and we don't want to mutate the original.
+	calculatedInputs := p.InputPatterns
+
+	if len(calculatedInputs) == 0 {
 		gitLsTreeOutput, err := gitLsTree(pkgPath)
 		if err != nil {
 			return nil, fmt.Errorf("could not get git hashes for files in package %s: %w", p.PackagePath, err)
@@ -43,11 +48,13 @@ func GetPackageDeps(rootPath turbopath.AbsolutePath, p *PackageDepsOptions) (map
 		// the package.json change (i.e. the tasks that turbo executes), we want
 		// a cache miss, since any existing cache could be invalid.
 		// Note this package.json will be resolved relative to the pkgPath.
-		p.InputPatterns = append(p.InputPatterns, "package.json")
 
-		absoluteFilesToHash, err := globby.GlobFiles(pkgPath.ToStringDuringMigration(), p.InputPatterns, nil)
+		// mutate by copy
+		calculatedInputs := copyAndAppend(calculatedInputs, "package.json")
+
+		absoluteFilesToHash, err := globby.GlobFiles(pkgPath.ToStringDuringMigration(), calculatedInputs, nil)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to resolve input globs %v", p.InputPatterns)
+			return nil, errors.Wrapf(err, "failed to resolve input globs %v", calculatedInputs)
 		}
 
 		filesToHash := make([]turbopath.AnchoredSystemPath, len(absoluteFilesToHash))
@@ -70,7 +77,7 @@ func GetPackageDeps(rootPath turbopath.AbsolutePath, p *PackageDepsOptions) (map
 
 	// Update the checked in hashes with the current repo status
 	// The paths returned from this call are anchored at the package directory
-	gitStatusOutput, err := gitStatus(pkgPath, p.InputPatterns)
+	gitStatusOutput, err := gitStatus(pkgPath, calculatedInputs)
 	if err != nil {
 		return nil, fmt.Errorf("Could not get git hashes from git status: %v", err)
 	}
@@ -426,4 +433,18 @@ func gitStatus(rootPath turbopath.AbsolutePath, patterns []string) (map[turbopat
 	}
 
 	return output, nil
+}
+
+// appends an item into a copy of an array to prevent mutating the original.
+// uses generics to take an array of any type and append an item of the same type.
+func copyAndAppend[K comparable](input []K, item K) []K {
+	output := make([]K, len(input))
+
+	for index, item := range input {
+		fmt.Printf("adding %#v at index %#v\n", item, index)
+		output[index] = item
+	}
+
+	output = append(output, item)
+	return output
 }
