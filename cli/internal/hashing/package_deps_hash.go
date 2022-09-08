@@ -48,8 +48,6 @@ func GetPackageDeps(rootPath turbopath.AbsolutePath, p *PackageDepsOptions) (map
 		// the package.json change (i.e. the tasks that turbo executes), we want
 		// a cache miss, since any existing cache could be invalid.
 		// Note this package.json will be resolved relative to the pkgPath.
-
-		// mutate by copy
 		calculatedInputs := copyAndAppend(calculatedInputs, "package.json")
 
 		absoluteFilesToHash, err := globby.GlobFiles(pkgPath.ToStringDuringMigration(), calculatedInputs, nil)
